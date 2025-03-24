@@ -1,7 +1,7 @@
 #include <ncurses.h>
 #include <stdlib.h>
 #include <time.h>
-#include <unistd.h> // Pour usleep
+#include <unistd.h> 
  
 #define SIZE 3
  
