@@ -1,167 +1,147 @@
 #include <ncurses.h>
 #include <stdlib.h>
 #include <time.h>
-
-#define TAILLE 3
-#define MAX_MOVES 9
-
-typedef struct {
-    int x;
-    int y;
-} Position;
-
-char plateau[TAILLE][TAILLE];
-char joueurActuel = 'X';
-int jeuTermine = 0;
-Position historiqueMouvements[MAX_MOVES];
-int nombreMouvements = 0;
-
-void initialiserPlateau();
-void afficherPlateau(WINDOW *win);
-int verifierGagnant();
-int verifierMatchNul();
-void mouvementJoueur(WINDOW *win);
-Position getPositionCurseur(WINDOW *win);
-void rejouerPartie(WINDOW *win);
-void mouvementIA();
-void afficherMenu();
-
+#include <unistd.h> // Pour usleep
+ 
+#define SIZE 3
+ 
+char board[SIZE][SIZE];
+int moves[SIZE * SIZE][2], move_count = 0;
+ 
+void init_board() {
+    for (int i = 0; i < SIZE; i++)
+        for (int j = 0; j < SIZE; j++)
+            board[i][j] = ' ';
+    move_count = 0;
+}
+ 
+void draw_board(int cursor_x, int cursor_y) {
+    clear();
+    mvprintw(0, 0, " TIC-TAC-TOE ");
+    mvprintw(1, 0, "==============");
+    for (int i = 0; i < SIZE; i++) {
+        for (int j = 0; j < SIZE; j++) {
+            if (i == cursor_y && j == cursor_x) {
+                attron(A_REVERSE);
+                mvprintw(i * 2 + 3, j * 4, " %c ", board[i][j]);
+                attroff(A_REVERSE);
+            } else {
+                mvprintw(i * 2 + 3, j * 4, " %c ", board[i][j]);
+            }
+            if (j < SIZE - 1) printw("|");
+        }
+        if (i < SIZE - 1) mvprintw(i * 2 + 4, 0, "---+---+---");
+    }
+    refresh();
+}
+ 
+int check_winner() {
+    for (int i = 0; i < SIZE; i++) {
+        if (board[i][0] != ' ' && board[i][0] == board[i][1] && board[i][1] == board[i][2]) return board[i][0];
+        if (board[0][i] != ' ' && board[0][i] == board[1][i] && board[1][i] == board[2][i]) return board[0][i];
+    }
+    if (board[0][0] != ' ' && board[0][0] == board[1][1] && board[1][1] == board[2][2]) return board[0][0];
+    if (board[0][2] != ' ' && board[0][2] == board[1][1] && board[1][1] == board[2][0]) return board[0][2];
+    return move_count == SIZE * SIZE ? 'D' : 0;
+}
+ 
+void player_move(char symbol) {
+    int cursor_x = 0, cursor_y = 0;
+    int ch;
+    while (1) {
+        draw_board(cursor_x, cursor_y);
+        ch = getch();
+        if (ch == 'q') exit(0);
+        else if (ch == KEY_UP && cursor_y > 0) cursor_y--;
+        else if (ch == KEY_DOWN && cursor_y < SIZE - 1) cursor_y++;
+        else if (ch == KEY_LEFT && cursor_x > 0) cursor_x--;
+        else if (ch == KEY_RIGHT && cursor_x < SIZE - 1) cursor_x++;
+        else if (ch == ' ' && board[cursor_y][cursor_x] == ' ') {
+            board[cursor_y][cursor_x] = symbol;
+            moves[move_count][0] = cursor_y;
+            moves[move_count][1] = cursor_x;
+            move_count++;
+            break;
+        }
+    }
+}
+ 
+void ai_move(char symbol) {
+    int x, y;
+    do {
+        x = rand() % SIZE;
+        y = rand() % SIZE;
+    } while (board[y][x] != ' ');
+    board[y][x] = symbol;
+    moves[move_count][0] = y;
+    moves[move_count][1] = x;
+    move_count++;
+    draw_board(-1,-1);
+    usleep(500000);
+}
+ 
+void replay() {
+    int saved_moves = move_count;
+    init_board();
+    for (int i = 0; i < saved_moves; i++) {
+        board[moves[i][0]][moves[i][1]] = (i % 2 == 0) ? 'X' : 'O';
+        draw_board(-1, -1);
+        usleep(500000);
+    }
+    mvprintw(14, 0, "Replayed Winner: %c", check_winner());
+    getch();
+}
+ 
+void game_loop(int mode) {
+    init_board();
+    char turn = 'X';
+    while (!check_winner()) {
+        if (mode == 3 || (mode == 2 && turn == 'O')) ai_move(turn);
+        else player_move(turn);
+        turn = (turn == 'X') ? 'O' : 'X';
+    }
+    draw_board(-1, -1);
+    mvprintw(14, 0, "Winner: %c", check_winner());
+    getch();
+}
+ 
+void menu() {
+    int choice = 0;
+    int ch;
+    while (1) {
+        clear();
+        mvprintw(2, 0, " TIC-TAC-TOE MENU ");
+        mvprintw(3, 0, "=================");
+        char *options[] = {"Player vs Player", "Player vs AI", "AI vs AI", "Replay", "Quit"};
+        for (int i = 0; i < 5; i++) {
+            if (i == choice) {
+                attron(A_REVERSE);
+                mvprintw(5 + i, 0, "%s", options[i]);
+                attroff(A_REVERSE);
+            } else {
+                mvprintw(5 + i, 0, "%s", options[i]);
+            }
+        }
+        refresh();
+        ch = getch();
+        if (ch == KEY_UP && choice > 0) choice--;
+        else if (ch == KEY_DOWN && choice < 4) choice++;
+        else if (ch == '\n') {
+            if (choice == 4) break;
+            else if (choice == 3) {
+                replay();
+            } else game_loop(choice + 1);
+        }
+    }
+}
+ 
 int main() {
+    srand(time(0));
     initscr();
-    cbreak();
-    noecho();
     keypad(stdscr, TRUE);
-    srand(time(NULL));
-
-    afficherMenu();
-
+    noecho();
+    curs_set(0);
+    menu();
     endwin();
     return 0;
 }
-
-void afficherMenu() {
-    int max_y, max_x;
-    getmaxyx(stdscr, max_y, max_x);
-    char *menu_items[] = {"Joueur vs Joueur", "Joueur vs IA", "IA vs IA", "Replay", "Quitter"};
-    int num_items = 5;
-    int selected_item = 0;
-
-    while (1) {
-        clear();
-        mvprintw(max_y / 4, (max_x - 10) / 2, "TIC-TAC-TOE");
-        for (int i = 0; i < num_items; i++) {
-            if (i == selected_item) attron(A_REVERSE);
-            mvprintw(max_y / 4 + 2 + i, (max_x - 10) / 2, "%s", menu_items[i]);
-            attroff(A_REVERSE);
-        }
-
-        int ch = getch();
-        switch (ch) {
-            case KEY_UP: selected_item = (selected_item - 1 + num_items) % num_items; break;
-            case KEY_DOWN: selected_item = (selected_item + 1) % num_items; break;
-            case 10:
-                if (selected_item == 0 || selected_item == 1 || selected_item == 2) {
-                    WINDOW *plateauWin = newwin(TAILLE * 3 + 3, TAILLE * 5 + 3, 5, 10);
-                    box(plateauWin, 0, 0);
-                    refresh();
-                    initialiserPlateau();
-                    afficherPlateau(plateauWin);
-                    jeuTermine = 0;
-                    joueurActuel = 'X';
-                    nombreMouvements = 0;
-
-                    while (!jeuTermine) {
-                        if ((selected_item == 1 && joueurActuel == 'O') || selected_item == 2) {
-                            mouvementIA();
-                        } else {
-                            Position pos = getPositionCurseur(plateauWin);
-                            plateau[pos.y][pos.x] = joueurActuel;
-                        }
-
-                        afficherPlateau(plateauWin);
-                        if (verifierGagnant()) {
-                            jeuTermine = 1;
-                            mvwprintw(plateauWin, TAILLE * 3 + 1, 2, "Le joueur %c a gagné !", joueurActuel);
-                        } else if (verifierMatchNul()) {
-                            jeuTermine = 1;
-                            mvwprintw(plateauWin, TAILLE * 3 + 1, 2, "Match nul !");
-                        } else {
-                            joueurActuel = (joueurActuel == 'X') ? 'O' : 'X';
-                        }
-                    }
-                    wrefresh(plateauWin);
-                    getch();
-                    delwin(plateauWin);
-                }
-                return;
-        }
-        refresh();
-    }
-}
-
-void initialiserPlateau() {
-    for (int i = 0; i < TAILLE; i++) {
-        for (int j = 0; j < TAILLE; j++) {
-            plateau[i][j] = ' ';
-        }
-    }
-}
-
-void afficherPlateau(WINDOW *win) {
-    for (int i = 0; i < TAILLE; i++) {
-        for (int j = 0; j < TAILLE; j++) {
-            mvwprintw(win, i * 3 + 2, j * 5 + 3, "%c", plateau[i][j]);
-        }
-    }
-    wrefresh(win);
-}
-
-int verifierGagnant() {
-    for (int i = 0; i < TAILLE; i++) {
-        if (plateau[i][0] == plateau[i][1] && plateau[i][1] == plateau[i][2] && plateau[i][0] != ' ') return 1;
-        if (plateau[0][i] == plateau[1][i] && plateau[1][i] == plateau[2][i] && plateau[0][i] != ' ') return 1;
-    }
-    if ((plateau[0][0] == plateau[1][1] && plateau[1][1] == plateau[2][2] && plateau[0][0] != ' ') ||
-        (plateau[0][2] == plateau[1][1] && plateau[1][1] == plateau[2][0] && plateau[0][2] != ' ')) {
-        return 1;
-    }
-    return 0;
-}
-
-int verifierMatchNul() {
-    for (int i = 0; i < TAILLE; i++) {
-        for (int j = 0; j < TAILLE; j++) {
-            if (plateau[i][j] == ' ') return 0;
-        }
-    }
-    return 1;
-}
-
-void mouvementIA() {
-    for (int i = 0; i < TAILLE; i++) {
-        for (int j = 0; j < TAILLE; j++) {
-            if (plateau[i][j] == ' ') {
-                plateau[i][j] = joueurActuel;
-                return;
-            }
-        }
-    }
-}
-
-Position getPositionCurseur(WINDOW *win) {
-    Position pos = {0, 0};
-    int ch;
-    while (1) {
-        ch = getch();
-        switch (ch) {
-            case KEY_UP: pos.y = (pos.y - 1 + TAILLE) % TAILLE; break;
-            case KEY_DOWN: pos.y = (pos.y + 1) % TAILLE; break;
-            case KEY_LEFT: pos.x = (pos.x - 1 + TAILLE) % TAILLE; break;
-            case KEY_RIGHT: pos.x = (pos.x + 1) % TAILLE; break;
-            case 10: if (plateau[pos.y][pos.x] == ' ') return pos;
-        }
-        wmove(win, pos.y * 3 + 2, pos.x * 5 + 3);
-        wrefresh(win);
-    }
-}
-
