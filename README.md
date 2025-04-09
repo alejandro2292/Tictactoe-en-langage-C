@@ -22,5 +22,4 @@ Ce projet implémente un jeu de **Tic-Tac-Toe (morpion)** en utilisant la biblio
 - **Joueur vs Joueur** : Deux joueurs humains jouent à tour de rôle.
 - **Joueur vs IA** : Un joueur humain contre une IA.
 - **IA vs IA** : Deux IA s'affrontent entre elles.
-- **Replay** : Revivez la dernière partie jouée.
 - **Quitter** : Quitte le jeu.
